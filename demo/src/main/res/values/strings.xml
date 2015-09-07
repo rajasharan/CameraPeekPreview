@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Camera Peek Preview</string>
+
+    <string name="demo_text">
+        Drag the Camera icon to get a Peek Preview.
+        Tap anywhere inside the preview to take a snapshot.
+    </string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+</resources>
