@@ -126,12 +126,15 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         if (mPreviewSize != null) {
-            if (mDisplayInversed) {
-                mTextureView.layout(l, t, l + mPreviewSize.height, t + mPreviewSize.width);
-            }
-            else {
-                mTextureView.layout(l, t, l + mPreviewSize.width, t + mPreviewSize.height);
-            }
+            int w = mDisplayInversed? mPreviewSize.height : mPreviewSize.width;
+            int h = mDisplayInversed? mPreviewSize.width : mPreviewSize.height;
+
+            int _l = l;
+            int _t = mTouchYaxis == -1? t : mTouchYaxis;
+            int _r = _l + w;
+            int _b = mTouchYaxis == -1? _t + h : mTouchYaxis + h;
+
+            mTextureView.layout(_l, _t, _r, _b);
         }
         else {
             mTextureView.layout(l, t, r, b);
@@ -182,21 +185,14 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
             }
         });
         for (Camera.Size size: pictureSizes) {
-            if (mDisplayInversed) {
-                float ratio = (float)size.height / (float)size.width;
-                if (Math.abs(ratio - mAspectRatio) <= TOLERANCE) {
-                    params.setPictureSize(size.width, size.height);
-                    mCamera.setParameters(params);
-                    break;
-                }
-            }
-            else {
-                float ratio = (float)size.width / (float)size.height;
-                if (Math.abs(ratio - mAspectRatio) <= TOLERANCE) {
-                    params.setPictureSize(size.width, size.height);
-                    mCamera.setParameters(params);
-                    break;
-                }
+            float ratio = mDisplayInversed?
+                    (float)size.height / (float)size.width:
+                    (float)size.width / (float)size.height;
+
+            if (Math.abs(ratio - mAspectRatio) <= TOLERANCE) {
+                params.setPictureSize(size.width, size.height);
+                mCamera.setParameters(params);
+                break;
             }
         }
 
@@ -204,13 +200,19 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
         Collections.sort(previewSizes, new Comparator<Camera.Size>() {
             @Override
             public int compare(Camera.Size lhs, Camera.Size rhs) {
-                return rhs.width - lhs.width;
+                int ret = lhs.width - rhs.width;
+                return ret == 0? lhs.height - rhs.height: ret;
             }
         });
-        Camera.Size bestPreviewSize = previewSizes.get(0);
-        params.setPreviewSize(bestPreviewSize.width, bestPreviewSize.height);
-        mCamera.setParameters(params);
-        mPreviewSize = bestPreviewSize;
+        for (Camera.Size size: previewSizes) {
+            int w = mDisplayInversed? size.height : size.width;
+            if (w >= width) {
+                mPreviewSize = size;
+                params.setPreviewSize(size.width, size.height);
+                mCamera.setParameters(params);
+                break;
+            }
+        }
 
         try {
             mCamera.setPreviewTexture(surface);
@@ -275,16 +277,17 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
 
     @Override
     public boolean onTouch(View v, MotionEvent event) {
+        int x = (int) event.getX();
         int y = (int) event.getY();
 
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                if (mTouchYaxis != -1 && y > mTouchYaxis) {
+                if (mTouchYaxis != -1) {
                     return true;
                 }
                 break;
             case MotionEvent.ACTION_UP:
-                if (mTouchYaxis != -1 && y > mTouchYaxis) {
+                if (mTouchYaxis != -1 && y > 0) {
                     mCamera.autoFocus(this);
                     return true;
                 }
@@ -352,8 +355,15 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
 
             Log.d(LOG_TAG, "ColorEffects: " + params.getColorEffect());
 
+            params.setAutoExposureLock(true);
             Log.d(LOG_TAG, String.format("exposureLockSupported: %s, value: %s",
                     params.isAutoExposureLockSupported(), params.getAutoExposureLock()));
+
+            Camera.CameraInfo info = new Camera.CameraInfo();
+            for (int i=0; i < Camera.getNumberOfCameras(); i++) {
+                Camera.getCameraInfo(i, info);
+                Log.d(LOG_TAG, String.format("Camera_%s Facing: %s, Orientation: %s", i, info.facing, info.orientation));
+            }
         }
 
         Log.d(LOG_TAG, String.format("ViewSize: (%s, %s) Rect: (%s,%s - %s,%s)", getWidth(), getHeight(),
