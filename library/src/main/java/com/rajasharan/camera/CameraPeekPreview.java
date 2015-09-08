@@ -10,15 +10,21 @@ import android.graphics.SurfaceTexture;
 import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.media.MediaActionSound;
+import android.os.Build;
+import android.os.HandlerThread;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.MotionEvent;
+import android.view.SoundEffectConstants;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Created by rajasharan on 9/6/15.
@@ -26,9 +32,12 @@ import java.io.IOException;
 public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceTextureListener,
         View.OnTouchListener, Camera.PictureCallback, Camera.ShutterCallback, Camera.AutoFocusCallback {
     private static final String TAG = "CameraPeekPreview";
+    private static final String LOG_TAG = "LOG_CameraPeekPreview";
 
     private TextureView mTextureView;
     private Camera mCamera;
+    private Camera.Size mPreviewSize;
+    private boolean mDisplayInversed;
     private Drawable mCameraIcon;
     private int mTouchYaxis;
     private int mMaxHeight;
@@ -53,6 +62,7 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
         mTextureView.setOnTouchListener(this);
         mCameraIcon = context.getResources().getDrawable(android.R.drawable.ic_menu_camera);
         mTouchYaxis = -1;
+        mDisplayInversed = false;
         mMaxHeight = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 150f,
                 context.getResources().getDisplayMetrics());
     }
@@ -87,13 +97,36 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
         widthMeasureSpec = MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY);
         heightMeasureSpec = MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY);
 
-        mTextureView.measure(widthMeasureSpec, heightMeasureSpec);
+        if (mPreviewSize != null) {
+            int previewWidthSpec = MeasureSpec.makeMeasureSpec(mPreviewSize.width, MeasureSpec.EXACTLY);
+            int previewHeightSpec = MeasureSpec.makeMeasureSpec(mPreviewSize.height, MeasureSpec.EXACTLY);
+
+            if (mDisplayInversed) {
+                mTextureView.measure(previewHeightSpec, previewWidthSpec);
+            }
+            else {
+                mTextureView.measure(previewWidthSpec, previewHeightSpec);
+            }
+        }
+        else {
+            mTextureView.measure(widthMeasureSpec, heightMeasureSpec);
+        }
         setMeasuredDimension(widthMeasureSpec, heightMeasureSpec);
     }
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        mTextureView.layout(l, t, r, b);
+        if (mPreviewSize != null) {
+            if (mDisplayInversed) {
+                mTextureView.layout(l, t, l + mPreviewSize.height, t + mPreviewSize.width);
+            }
+            else {
+                mTextureView.layout(l, t, l + mPreviewSize.width, t + mPreviewSize.height);
+            }
+        }
+        else {
+            mTextureView.layout(l, t, r, b);
+        }
 
         for (int i=0; i < getChildCount(); i++) {
             View v = getChildAt(i);
@@ -128,7 +161,32 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
         mCamera.startPreview();
         if (getMeasuredWidth() < getMeasuredHeight()) {
             mCamera.setDisplayOrientation(90);
+            mDisplayInversed = true;
         }
+
+        Camera.Parameters params = mCamera.getParameters();
+        List<Camera.Size> pictureSizes = params.getSupportedPictureSizes();
+        Collections.sort(pictureSizes, new Comparator<Camera.Size>() {
+            @Override
+            public int compare(Camera.Size lhs, Camera.Size rhs) {
+                return rhs.width - lhs.width;
+            }
+        });
+        Camera.Size bestPictureSize = pictureSizes.get(0);
+        params.setPictureSize(bestPictureSize.width, bestPictureSize.height);
+        mCamera.setParameters(params);
+
+        List<Camera.Size> previewSizes = params.getSupportedPreviewSizes();
+        Collections.sort(previewSizes, new Comparator<Camera.Size>() {
+            @Override
+            public int compare(Camera.Size lhs, Camera.Size rhs) {
+                return rhs.width - lhs.width;
+            }
+        });
+        Camera.Size bestPreviewSize = previewSizes.get(0);
+        params.setPreviewSize(bestPreviewSize.width, bestPreviewSize.height);
+        mCamera.setParameters(params);
+        mPreviewSize = bestPreviewSize;
 
         try {
             mCamera.setPreviewTexture(surface);
@@ -204,7 +262,6 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
             case MotionEvent.ACTION_UP:
                 if (mTouchYaxis != -1 && y > mTouchYaxis) {
                     mCamera.autoFocus(this);
-                    //mCamera.takePicture(this, null, null, this);
                     return true;
                 }
                 break;
@@ -217,7 +274,9 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
         Bitmap b = BitmapFactory.decodeByteArray(data, 0, data.length);
         if (mListener != null) {
             Matrix m = new Matrix();
-            m.setRotate(90);
+            if (mDisplayInversed) {
+                m.setRotate(90);
+            }
             Bitmap bitmap = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, false);
             mListener.onPictureTaken(bitmap);
         }
@@ -227,7 +286,12 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
 
     @Override
     public void onShutter() {
-        this.playSoundEffect(MediaActionSound.SHUTTER_CLICK);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            this.playSoundEffect(MediaActionSound.SHUTTER_CLICK);
+        }
+        else {
+            this.playSoundEffect(SoundEffectConstants.CLICK);
+        }
     }
 
     public void setOnPictureTakenListener(OnPictureTakenListener listener) {
@@ -241,5 +305,34 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
 
     public interface OnPictureTakenListener {
         void onPictureTaken(Bitmap bitmap);
+    }
+
+    public void logCameraParams() {
+        if (mCamera != null) {
+            Camera.Parameters params = mCamera.getParameters();
+
+            Log.d(LOG_TAG, "List<PictureSizes>: ");
+            for (Camera.Size size: params.getSupportedPictureSizes()) {
+                Log.d(LOG_TAG, String.format("PictureSize: (%s, %s)", size.width, size.height));
+            }
+
+            Camera.Size pictureSize = params.getPictureSize();
+            Log.d(LOG_TAG, String.format("current PictureSize: (%s, %s)", pictureSize.width, pictureSize.height));
+
+            Log.d(LOG_TAG, String.format("List<PreviewSizes>: "));
+            for (Camera.Size size: params.getSupportedPreviewSizes()) {
+                Log.d(LOG_TAG, String.format("PreviewSize: (%s, %s)", size.width, size.height));
+            }
+
+            Camera.Size previewSize = params.getPreviewSize();
+            Log.d(LOG_TAG, String.format("current PreviewSize: (%s, %s)", previewSize.width, previewSize.height));
+        }
+
+        Log.d(LOG_TAG, String.format("ViewSize: (%s, %s) Rect: (%s,%s - %s,%s)", getWidth(), getHeight(),
+                getLeft(), getTop(), getRight(), getBottom()));
+
+        Log.d(LOG_TAG, String.format("TextureViewSize: (%s, %s) Rect: (%s,%s - %s,%s)",
+                mTextureView.getWidth(), mTextureView.getHeight(),
+                mTextureView.getLeft(), mTextureView.getTop(), mTextureView.getRight(), mTextureView.getBottom()));
     }
 }
