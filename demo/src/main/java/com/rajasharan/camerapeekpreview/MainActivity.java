@@ -86,11 +86,11 @@ public class MainActivity extends AppCompatActivity implements CameraPeekPreview
 
                 File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
                 File cameraDir = new File(dir, "Camera");
-                final File file = new File(cameraDir, "PeekPreview_" + System.currentTimeMillis() + ".png");
+                final File file = new File(cameraDir, "PeekPreview_" + System.currentTimeMillis() + ".jpg");
 
                 try {
                     FileOutputStream out = new FileOutputStream(file);
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out);
                     out.close();
 
                     runOnUiThread(new Runnable() {
