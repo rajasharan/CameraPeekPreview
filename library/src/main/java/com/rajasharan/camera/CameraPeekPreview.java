@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Point;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
@@ -19,6 +20,7 @@ import android.view.SoundEffectConstants;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -32,11 +34,13 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
         View.OnTouchListener, Camera.PictureCallback, Camera.ShutterCallback, Camera.AutoFocusCallback {
     private static final String TAG = "CameraPeekPreview";
     private static final String LOG_TAG = "LOG_CameraPeekPreview";
+    private static final float TOLERANCE = 0.0001f;
 
     private TextureView mTextureView;
     private Camera mCamera;
     private Camera.Size mPreviewSize;
     private boolean mDisplayInversed;
+    private float mAspectRatio;
     private Drawable mCameraIcon;
     private int mTouchYaxis;
     private int mMaxHeight;
@@ -62,8 +66,14 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
         mCameraIcon = context.getResources().getDrawable(android.R.drawable.ic_menu_camera);
         mTouchYaxis = -1;
         mDisplayInversed = false;
+
         mMaxHeight = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 150f,
                 context.getResources().getDisplayMetrics());
+
+        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+        Point size = new Point();
+        wm.getDefaultDisplay().getSize(size);
+        mAspectRatio = (float)size.x / (float)size.y;
     }
 
     @Override
@@ -171,9 +181,24 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
                 return rhs.width - lhs.width;
             }
         });
-        Camera.Size bestPictureSize = pictureSizes.get(0);
-        params.setPictureSize(bestPictureSize.width, bestPictureSize.height);
-        mCamera.setParameters(params);
+        for (Camera.Size size: pictureSizes) {
+            if (mDisplayInversed) {
+                float ratio = (float)size.height / (float)size.width;
+                if (Math.abs(ratio - mAspectRatio) <= TOLERANCE) {
+                    params.setPictureSize(size.width, size.height);
+                    mCamera.setParameters(params);
+                    break;
+                }
+            }
+            else {
+                float ratio = (float)size.width / (float)size.height;
+                if (Math.abs(ratio - mAspectRatio) <= TOLERANCE) {
+                    params.setPictureSize(size.width, size.height);
+                    mCamera.setParameters(params);
+                    break;
+                }
+            }
+        }
 
         List<Camera.Size> previewSizes = params.getSupportedPreviewSizes();
         Collections.sort(previewSizes, new Comparator<Camera.Size>() {
@@ -324,6 +349,11 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
 
             Camera.Size previewSize = params.getPreviewSize();
             Log.d(LOG_TAG, String.format("current PreviewSize: (%s, %s)", previewSize.width, previewSize.height));
+
+            Log.d(LOG_TAG, "ColorEffects: " + params.getColorEffect());
+
+            Log.d(LOG_TAG, String.format("exposureLockSupported: %s, value: %s",
+                    params.isAutoExposureLockSupported(), params.getAutoExposureLock()));
         }
 
         Log.d(LOG_TAG, String.format("ViewSize: (%s, %s) Rect: (%s,%s - %s,%s)", getWidth(), getHeight(),
@@ -332,5 +362,6 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
         Log.d(LOG_TAG, String.format("TextureViewSize: (%s, %s) Rect: (%s,%s - %s,%s)",
                 mTextureView.getWidth(), mTextureView.getHeight(),
                 mTextureView.getLeft(), mTextureView.getTop(), mTextureView.getRight(), mTextureView.getBottom()));
+
     }
 }
