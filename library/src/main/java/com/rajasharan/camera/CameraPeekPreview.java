@@ -11,7 +11,6 @@ import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.media.MediaActionSound;
 import android.os.Build;
-import android.os.HandlerThread;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.TypedValue;
@@ -280,7 +279,6 @@ public class CameraPeekPreview extends ViewGroup implements TextureView.SurfaceT
             Bitmap bitmap = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, false);
             mListener.onPictureTaken(bitmap);
         }
-        b.recycle();
         camera.startPreview();
     }
 
