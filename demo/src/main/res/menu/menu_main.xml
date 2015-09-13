@@ -3,10 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools" tools:context=".MainActivity">
 
     <item android:id="@+id/action_hide" android:title="Hide text"
-        android:orderInCategory="100" app:showAsAction="never" />
+        android:orderInCategory="1" app:showAsAction="never" />
 
-    <item android:id="@+id/action_log" android:title="Show Logs"
-        android:orderInCategory="1" app:showAsAction="always"
+    <item android:id="@+id/action_log" android:title="Print Logs"
+        android:orderInCategory="2" app:showAsAction="never"
         android:icon="@android:drawable/ic_dialog_info"
         />
 </menu>
